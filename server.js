@@ -34,7 +34,7 @@ app.get('/', function(req, res){
   
 // your first API endpoint... 
 app.post("/api/shorturl/new", shortUrlController.postUrl);
-
+app.get("/api/shorturl/:id", shortUrlController.getRedirect);
 
 app.listen(port, function () {
   console.log('Node.js listening ...');

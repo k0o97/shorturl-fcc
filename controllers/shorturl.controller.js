@@ -1,24 +1,22 @@
 const ShortURL = require('../models/shorturl.model');
 const Counter = require('../models/counter.model');
 const dns = require('dns');
+
 async function getNextSequence(name) {
     let counter = await Counter.find();
 
-    if (!counter) {
+    if (counter.length === 0) {
         counter = new Counter({ _id: "shorturlid", seq: 0 });
+        await counter.save();
     }
 
-    var ret = await Counter.findAndModify(
-           {
-             query: { _id: name },
-             update: { $inc: { seq: 1 } },
-             new: true
-           }
-    );
+    var ret = await Counter.findOne({ _id: name });
+    ret.seq++;
+    await ret.save();
     return ret.seq;
  }
 
-module.exports.postUrl = async function (req, res) {
+module.exports.postUrl = function (req, res) {
     let inputURL = req.body.url;
 
     //check url begin with http:// or https://
@@ -26,17 +24,30 @@ module.exports.postUrl = async function (req, res) {
         return res.json({ error: "Invalid URL" });
     }
     
-    let hostname = inputURL.slice(inputURL.indexOf('//') + 2);
-    var shortURL = await ShortURL.findOne({ original_url: inputURL });
-    dns.lookup(hostname, (err, address) => {
+    let hostname = inputURL.slice(inputURL.indexOf('//') + 2).split('/')[0];
+    
+    dns.lookup(hostname, async (err, address) => {
         if (err) {
             return res.json({ error: "Invalid Hostname"});
         }
+
+        var shortURL = await ShortURL.findOne({ original_url: inputURL });
         if (!shortURL) {
-            let newShortURL = new ShortURL({ original_url: inputURL});
+            let newShortURL = new ShortURL({ original_url: inputURL, _id: await getNextSequence("shorturlid") });
             newShortURL.save();
-            res.json(newShortURL);
+            return res.json({ original_url: inputURL, short_url: newShortURL._id });
         }
-        //res.json({ original_url: inputURL, short_url: shortURL._id });
+        res.json({ original_url: inputURL, short_url: shortURL._id });
     });
+};
+
+module.exports.getRedirect = async function (req, res) {
+    let id = req.params.id;
+    try {
+        let shortURL = await ShortURL.findById(id);
+        res.redirect(301, shortURL.original_url);
+    } 
+    catch (err) {
+        res.send("Not found");
+    }
 };
